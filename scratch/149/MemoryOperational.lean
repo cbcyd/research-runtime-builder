@@ -11,3 +11,6 @@ import MemoryOperational.SoftmaxPhysicalBridge
 import MemoryOperational.SoftmaxLocalInverse
 import MemoryOperational.SoftmaxGenericLocalOpen
 import MemoryOperational.SoftmaxAffineMinimality
+import MemoryOperational.SoftmaxContinuousBoundary
+import MemoryOperational.SoftmaxContinuousRealization
+import MemoryOperational.SoftmaxContinuousSoftmax
