@@ -80,12 +80,12 @@ jobs:
           t = p.read_text()
           targeted = (
               "lake exe cache get \\\n"
-              "  Mathlib/LinearAlgebra/Matrix/Rank.lean \\\n"
-              "  Mathlib/LinearAlgebra/Matrix/Determinant/Basic.lean \\\n"
-              "  Mathlib/LinearAlgebra/FiniteDimensional/Basic.lean \\\n"
-              "  Mathlib/Analysis/InnerProductSpace/PiL2.lean \\\n"
-              "  Mathlib/Tactic/Ring.lean \\\n"
-              "  Mathlib/Tactic/NormNum.lean\n"
+              "  Mathlib.LinearAlgebra.Matrix.Rank \\\n"
+              "  Mathlib.LinearAlgebra.Matrix.Determinant.Basic \\\n"
+              "  Mathlib.LinearAlgebra.FiniteDimensional.Basic \\\n"
+              "  Mathlib.Analysis.InnerProductSpace.PiL2 \\\n"
+              "  Mathlib.Tactic.Ring \\\n"
+              "  Mathlib.Tactic.NormNum\n"
           )
           if "lake exe cache get\n" not in t:
               raise SystemExit("expected full-cache command not found")
@@ -105,6 +105,18 @@ jobs:
           ]
           p.write_text("\n".join(lines) + "\n")
           PY
+
+          echo "=== validate requested modules exist in pinned mathlib ==="
+          for m in \
+            Mathlib.LinearAlgebra.Matrix.Rank \
+            Mathlib.LinearAlgebra.Matrix.Determinant.Basic \
+            Mathlib.LinearAlgebra.FiniteDimensional.Basic \
+            Mathlib.Analysis.InnerProductSpace.PiL2 \
+            Mathlib.Tactic.Ring \
+            Mathlib.Tactic.NormNum; do \
+            p=".lake/packages/mathlib/${m//./\/}.lean"; \
+            test -f "$p" || { echo "missing module source: $m -> $p"; exit 1; }; \
+          done
 
           echo "=== patched cache command ==="
           grep -A8 -B2 "cache get" scripts/materialize_linux_bundle.sh
