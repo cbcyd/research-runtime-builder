@@ -111,7 +111,7 @@ theorem continuous_compiled_softmax_dimension_lower_bound_of_open_obstruction
     (Q : Fin m → Fin kdim → ℝ)
     (hQ : Function.Injective Q)
     (hQ0 : ∀ i, Q i ≠ 0)
-    (R : ContinuousCompiledRealization
+    (R : ContinuousCompiledRealization (ν := ν)
       (softmaxFiniteFactorization scale Q) d) :
     m * (1 + Fintype.card ν) ≤ d := by
   rcases exists_nonzero_separating_direction_for_softmax
@@ -122,7 +122,7 @@ theorem continuous_compiled_softmax_dimension_lower_bound_of_open_obstruction
   let lambda : Fin m → ℝ := fun j => lineSlope scale Q u j
   let cstar : Fin m → ℝ :=
     fun j => Real.exp (scale * ∑ a, Q j a * kstar a)
-  let P :=
+  let P : ContinuousExactPhysicalProbeRealization m d ν c lambda cstar :=
     R.toPhysicalProbeRealization scale Q c lambda kstar
   apply P.dimension_lower_bound_of_open_obstruction
     hTop c lambda cstar
