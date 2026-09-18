@@ -86,7 +86,11 @@ theorem continuous_state_dimension_lower_bound_of_open_obstruction
     intro x y hxy
     apply Subtype.ext
     exact hinj (hUsub x.property) (hUsub y.property) hxy
-  have hdim := hTop U hUopen hUne f hfcont hfinj
+  have hdim :
+      Module.finrank ℝ (SummaryTangent m ν) ≤
+        Module.finrank ℝ (Fin d → ℝ) :=
+    hTop (E := SummaryTangent m ν) (F := Fin d → ℝ)
+      U hUopen hUne f hfcont hfinj
   rw [summaryTangent_finrank, Module.finrank_fin_fun] at hdim
   exact hdim
 
