@@ -45,7 +45,7 @@ noncomputable def ContinuousCompiledRealization.toPhysicalProbeRealization
     (scale : ℝ) (Q : Fin m → Fin kdim → ℝ)
     (c lambda : Fin m → ℝ)
     (kstar : Fin kdim → ℝ)
-    (R : ContinuousCompiledRealization
+    (R : ContinuousCompiledRealization (ν := ν)
       (softmaxFiniteFactorization scale Q) d) :
     ContinuousExactPhysicalProbeRealization m d ν c lambda
       (fun op => Real.exp (scale * ∑ a, Q op a * kstar a)) where
@@ -72,8 +72,24 @@ noncomputable def ContinuousCompiledRealization.toPhysicalProbeRealization
         (fun op => Real.exp (scale * ∑ a, Q op a * kstar a))
         (richSummaryMap (ν := ν) c lambda x) op v
     rw [← hstep]
+    change
+      R.realization.observe
+          (R.realization.compile
+            (State.append F
+              (richSummaryMap (ν := ν) c lambda x) kstar v)) op
+        =
+      tangentProbeRead
+        (fun op => Real.exp (scale * ∑ a, Q op a * kstar a))
+        (richSummaryMap (ν := ν) c lambda x) op v
     have hop := congrFun hobs op
     rw [← hop]
+    change
+      State.read F
+          (State.append F (richSummaryMap (ν := ν) c lambda x) kstar v) op
+        =
+      tangentProbeRead
+        (fun op => Real.exp (scale * ∑ a, Q op a * kstar a))
+        (richSummaryMap (ν := ν) c lambda x) op v
     rw [softmax_read_eq_querySummary]
     rw [querySummary_append]
     rfl
