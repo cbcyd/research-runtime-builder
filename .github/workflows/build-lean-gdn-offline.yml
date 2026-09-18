@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
-      XDG_CACHE_HOME: ${{ runner.temp }}/xdg-cache
+      XDG_CACHE_HOME: /tmp/lean-xdg-cache
 
     steps:
       - uses: actions/checkout@v4
@@ -43,7 +43,6 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          # Pin the builder to the current Lean/Mathlib release.
           for name in [
               "scripts/materialize_linux_bundle.sh",
               "lakefile.lean",
@@ -53,53 +52,44 @@ jobs:
               p = Path(name)
               p.write_text(p.read_text().replace("4.30.0", "4.34.0"))
 
-          # Minimal first-pass import surface for the GDN paper.
-          imports = """import Mathlib.LinearAlgebra.Matrix.Rank
-          import Mathlib.LinearAlgebra.Matrix.Determinant.Basic
-          import Mathlib.LinearAlgebra.FiniteDimensional.Basic
-          import Mathlib.Analysis.InnerProductSpace.PiL2
-          import Mathlib.Tactic.Ring
-          import Mathlib.Tactic.NormNum
-          """
-          Path("OfflineBundle/BundleImports.lean").write_text(imports)
+          Path("OfflineBundle/BundleImports.lean").write_text(
+              "import Mathlib.LinearAlgebra.Matrix.Rank\n"
+              "import Mathlib.LinearAlgebra.Matrix.Determinant.Basic\n"
+              "import Mathlib.LinearAlgebra.FiniteDimensional.Basic\n"
+              "import Mathlib.Analysis.InnerProductSpace.PiL2\n"
+              "import Mathlib.Tactic.Ring\n"
+              "import Mathlib.Tactic.NormNum\n"
+          )
 
-          smoke = """import OfflineBundle.BundleImports
+          Path("OfflineBundle/Smoke.lean").write_text(
+              "import OfflineBundle.BundleImports\n\n"
+              "open Matrix\n\n"
+              "#check Matrix\n"
+              "#check Matrix.rank\n"
+              "#check Matrix.det\n"
+              "#check Module.finrank\n"
+              "#check EuclideanSpace\n\n"
+              "example (a b c d : ℝ) :\n"
+              "    (a + b) * (c + d) = a*c + a*d + b*c + b*d := by\n"
+              "  ring\n\n"
+              "example : (2 : ℝ) + 2 = 4 := by\n"
+              "  norm_num\n"
+          )
 
-          open Matrix
-
-          #check Matrix
-          #check Matrix.rank
-          #check Matrix.det
-          #check Module.finrank
-          #check EuclideanSpace
-
-          example (a b c d : ℝ) :
-              (a + b) * (c + d) = a*c + a*d + b*c + b*d := by
-            ring
-
-          example : (2 : ℝ) + 2 = 4 := by
-            norm_num
-          """
-          Path("OfflineBundle/Smoke.lean").write_text(smoke)
-
-          # The upstream materializer downloads the cache for all of Mathlib.
-          # That exhausted the 14 GB GitHub runner disk.  Mathlib's cache CLI
-          # supports file/module arguments and includes transitive imports, so
-          # request only the six roots used above.
           p = Path("scripts/materialize_linux_bundle.sh")
           t = p.read_text()
-          t = t.replace(
-              "lake exe cache get\n",
-              """lake exe cache get \\\n"
+          targeted = (
+              "lake exe cache get \\\n"
               "  Mathlib/LinearAlgebra/Matrix/Rank.lean \\\n"
               "  Mathlib/LinearAlgebra/Matrix/Determinant/Basic.lean \\\n"
               "  Mathlib/LinearAlgebra/FiniteDimensional/Basic.lean \\\n"
               "  Mathlib/Analysis/InnerProductSpace/PiL2.lean \\\n"
               "  Mathlib/Tactic/Ring.lean \\\n"
-              "  Mathlib/Tactic/NormNum.lean\n"""
+              "  Mathlib/Tactic/NormNum.lean\n"
           )
-          # Compressed cache entries are no longer needed once their .olean files
-          # are unpacked into the package build trees.
+          if "lake exe cache get\n" not in t:
+              raise SystemExit("expected full-cache command not found")
+          t = t.replace("lake exe cache get\n", targeted)
           t = t.replace(
               "lake build +OfflineBundle.BundleImports:olean +OfflineBundle.Smoke:olean\n",
               "lake build +OfflineBundle.BundleImports:olean +OfflineBundle.Smoke:olean\n"
@@ -108,11 +98,6 @@ jobs:
           )
           p.write_text(t)
 
-          # Lake 4.34 treats the legacy source-file query syntax
-          # test/OfflineSmoke.lean:* as a package target named 'test'.
-          # It is redundant: OfflineBundle.Smoke already gives the complete
-          # dependency closure, while the test file is still retained for the
-          # final offline verification.
           p = Path("scripts/build_chatgpt_bundle.sh")
           lines = [
               line for line in p.read_text().splitlines()
@@ -123,7 +108,7 @@ jobs:
 
           echo "=== patched cache command ==="
           grep -A8 -B2 "cache get" scripts/materialize_linux_bundle.sh
-          echo "=== remaining test queries (must be empty) ==="
+          echo "=== remaining legacy test queries (must be empty) ==="
           grep "test/OfflineSmoke.lean:" scripts/build_chatgpt_bundle.sh || true
 
       - name: Build targeted offline bundle
@@ -135,7 +120,6 @@ jobs:
           ./scripts/build_chatgpt_bundle.sh 2>&1 | tee build.log
 
       - name: Record manifest and disk usage
-        if: success()
         working-directory: lean-offline
         run: |
           {
@@ -151,7 +135,6 @@ jobs:
           df -h /
 
       - name: Upload bundle
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: lean-gdn-linux-x86_64-v4.34.0
