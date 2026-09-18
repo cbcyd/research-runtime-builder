@@ -114,6 +114,7 @@ jobs:
           compile_module MemoryOperational/SoftmaxLocalInverse.lean
           compile_module MemoryOperational/SoftmaxGenericLocalOpen.lean
           compile_module MemoryOperational/SoftmaxAffineMinimality.lean
+          compile_module MemoryOperational/SoftmaxContinuousBoundary.lean
           compile_module MemoryOperational.lean
           ./scripts/check_file.sh MemoryOperational/AxiomCheck.lean
           ./scripts/check_file.sh MemoryOperational/FullAxiomCheck.lean
