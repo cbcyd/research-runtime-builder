@@ -47,18 +47,24 @@ jobs:
           from pathlib import Path
 
           # Keep every mutation explicit and fail if the pinned upstream layout changes.
-          version_files = [
+          plain_version_files = [
               "scripts/materialize_linux_bundle.sh",
               "lakefile.lean",
               "lean-toolchain",
-              "scripts/rewrite_lake_for_offline.py",
           ]
-          for name in version_files:
+          for name in plain_version_files:
               p = Path(name)
               old = p.read_text()
               if "4.30.0" not in old:
                   raise SystemExit(f"expected 4.30.0 pin missing from {name}")
               p.write_text(old.replace("4.30.0", "4.34.0"))
+
+          # This file stores the version inside a regex, so the dots are escaped.
+          p = Path("scripts/rewrite_lake_for_offline.py")
+          old = p.read_text()
+          if r"4\.30\.0" not in old:
+              raise SystemExit("expected escaped 4.30.0 pin missing from rewrite_lake_for_offline.py")
+          p.write_text(old.replace(r"4\.30\.0", r"4\.34\.0"))
 
           Path("OfflineBundle/BundleImports.lean").write_text(
               "import Mathlib.LinearAlgebra.Matrix.Rank\n"
@@ -148,8 +154,12 @@ jobs:
           bash -n scripts/verify_offline_clean.sh
           bash -n scripts/check_file.sh
           python3 -m py_compile scripts/copy_lean_closure.py scripts/rewrite_lake_for_offline.py
-          if grep -R -n '4\.30\.0' scripts/materialize_linux_bundle.sh lakefile.lean lean-toolchain scripts/rewrite_lake_for_offline.py; then
-            echo "stale 4.30.0 pin remains"
+          if grep -F -n '4.30.0' scripts/materialize_linux_bundle.sh lakefile.lean lean-toolchain scripts/rewrite_lake_for_offline.py; then
+            echo "stale plain 4.30.0 pin remains"
+            exit 1
+          fi
+          if grep -F -n '4\.30\.0' scripts/rewrite_lake_for_offline.py; then
+            echo "stale escaped 4.30.0 pin remains"
             exit 1
           fi
 
