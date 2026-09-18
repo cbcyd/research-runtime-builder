@@ -92,7 +92,17 @@ jobs:
               raise SystemExit("unexpected materialize_linux_bundle.sh update/cache block")
           t = t.replace(
               "\nlake update\nlake exe cache get\n",
-              "\nMATHLIB_NO_CACHE_ON_UPDATE=1 lake update\nlake exe cache get\n",
+              "\nMATHLIB_NO_CACHE_ON_UPDATE=1 lake update\n"
+              "for f in \\\n"
+              "  Mathlib/LinearAlgebra/Matrix/Rank.lean \\\n"
+              "  Mathlib/LinearAlgebra/Matrix/Determinant/Basic.lean \\\n"
+              "  Mathlib/LinearAlgebra/FiniteDimensional/Basic.lean \\\n"
+              "  Mathlib/Analysis/InnerProductSpace/PiL2.lean \\\n"
+              "  Mathlib/Tactic/Ring.lean \\\n"
+              "  Mathlib/Tactic/NormNum.lean; do \\\n"
+              "  test -f \".lake/packages/mathlib/$f\" || { echo \"missing after lake update: $f\"; exit 1; }; \\\n"
+              "done\n"
+              "lake exe cache get\n",
           )
           if "lake env lean test/OfflineSmoke.lean" not in t:
               raise SystemExit("expected legacy materialize smoke path missing")
@@ -104,7 +114,7 @@ jobs:
           t = t.replace(
               "lake env lean OfflineBundle/Smoke.lean\n",
               "lake env lean OfflineBundle/Smoke.lean\n"
-              "rm -rf \"\${XDG_CACHE_HOME:-\$HOME/.cache}/mathlib\" || true\n"
+              "rm -rf \"${XDG_CACHE_HOME:-$HOME/.cache}/mathlib\" || true\n"
               "df -h /\n",
           )
           p.write_text(t)
@@ -131,6 +141,17 @@ jobs:
               raise SystemExit("expected legacy verifier smoke paths missing")
           p.write_text(t.replace("test/OfflineSmoke.lean", "OfflineBundle/Smoke.lean"))
           PY
+
+          echo "=== static syntax checks ==="
+          bash -n scripts/materialize_linux_bundle.sh
+          bash -n scripts/build_chatgpt_bundle.sh
+          bash -n scripts/verify_offline_clean.sh
+          bash -n scripts/check_file.sh
+          python3 -m py_compile scripts/copy_lean_closure.py scripts/rewrite_lake_for_offline.py
+          if grep -R -n '4\.30\.0' scripts/materialize_linux_bundle.sh lakefile.lean lean-toolchain scripts/rewrite_lake_for_offline.py; then
+            echo "stale 4.30.0 pin remains"
+            exit 1
+          fi
 
           echo "=== patched materializer ==="
           cat scripts/materialize_linux_bundle.sh
