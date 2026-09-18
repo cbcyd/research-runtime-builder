@@ -117,6 +117,7 @@ jobs:
           compile_module MemoryOperational/SoftmaxContinuousBoundary.lean
           compile_module MemoryOperational/SoftmaxContinuousRealization.lean
           compile_module MemoryOperational/SoftmaxContinuousSoftmax.lean
+          compile_module MemoryOperational/SoftmaxContinuousRecurrent.lean
           compile_module MemoryOperational/SoftmaxPositiveMass.lean
           compile_module MemoryOperational.lean
           ./scripts/check_file.sh MemoryOperational/AxiomCheck.lean
