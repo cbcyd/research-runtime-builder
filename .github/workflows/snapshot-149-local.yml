@@ -14,24 +14,15 @@ jobs:
   snapshot:
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout #149
+      - name: Checkout verifier mirror
         uses: actions/checkout@v4
-        with:
-          repository: cbcyd/latent-system-runtime
-          ref: research/149-memory-operational-quotient-v0
-          path: source
-          fetch-depth: 1
 
-      - name: Package #149 source
+      - name: Package #149 mirror
         shell: bash
         run: |
           set -euxo pipefail
-          cd source
-          git rev-parse HEAD | tee ../SOURCE_SHA.txt
-          tar -czf ../memory-operational-149-source.tar.gz \
-            docs/experiments/memory-operational-quotient-v0 \
-            docs/theory/MEMORY_OPERATIONAL_REALIZATION_V0.md
-          cd ..
+          git rev-parse HEAD | tee SOURCE_SHA.txt
+          tar -czf memory-operational-149-source.tar.gz scratch/149
           sha256sum memory-operational-149-source.tar.gz | tee SOURCE_SHA256.txt
 
       - name: Upload source snapshot
