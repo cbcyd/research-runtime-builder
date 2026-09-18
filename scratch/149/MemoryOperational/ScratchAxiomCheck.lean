@@ -1,3 +1,4 @@
+import MemoryOperational.SoftmaxContinuousSoftmax
 import MemoryOperational.SoftmaxGenericLocalOpen
 import MemoryOperational.SoftmaxAffineMinimality
 
