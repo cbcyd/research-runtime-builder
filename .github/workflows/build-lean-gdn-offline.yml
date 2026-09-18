@@ -269,6 +269,7 @@ jobs:
         working-directory: lean-offline
         env:
           PART_SIZE: 200M
+          XZ_OPT: "-T0 -3"
         run: |
           set -o pipefail
           ./scripts/build_chatgpt_bundle.sh 2>&1 | tee build.log
