@@ -125,6 +125,29 @@ jobs:
           )
           p.write_text(t)
 
+          # Lean 4.34 uses split OLean parts (.olean.server/.olean.private).
+          # The upstream copier predates that split and only copies .olean itself.
+          p = Path("scripts/copy_lean_closure.py")
+          t = p.read_text()
+          old = """for olean in sorted(olean_paths):
+    copy_path(olean)
+
+    if os.environ.get("INCLUDE_ILEAN") == "1":
+        copy_path(olean.with_suffix(".ilean"))
+"""
+          new = """for olean in sorted(olean_paths):
+    copy_path(olean)
+
+    # Lean 4.34 split module data into import-level sidecars.
+    # Copy every part that exists next to the main .olean.
+    copy_path(Path(str(olean) + ".server"))
+    copy_path(Path(str(olean) + ".private"))
+    copy_path(olean.with_suffix(".ilean"))
+"""
+          if old not in t:
+              raise SystemExit("unexpected copy_lean_closure.py olean block")
+          p.write_text(t.replace(old, new))
+
           # Packaging: completely remove the legacy test/ target from Lake queries
           # and from the staged bundle.
           p = Path("scripts/build_chatgpt_bundle.sh")
@@ -154,6 +177,8 @@ jobs:
           bash -n scripts/verify_offline_clean.sh
           bash -n scripts/check_file.sh
           python3 -m py_compile scripts/copy_lean_closure.py scripts/rewrite_lake_for_offline.py
+          grep -F 'Path(str(olean) + ".server")' scripts/copy_lean_closure.py
+          grep -F 'Path(str(olean) + ".private")' scripts/copy_lean_closure.py
           if grep -F -n '4.30.0' scripts/materialize_linux_bundle.sh lakefile.lean lean-toolchain scripts/rewrite_lake_for_offline.py; then
             echo "stale plain 4.30.0 pin remains"
             exit 1
