@@ -12,11 +12,13 @@ real normed space into another cannot lower dimension.
 
 This is a proposition, not an axiom. The final softmax theorem below takes it
 as an explicit hypothesis, isolating the exact standard-topology dependency. -/
-def OpenInjectionDimensionObstruction : Prop :=
-  ∀ {E F : Type*}
+universe u v
+
+def OpenInjectionDimensionObstruction
+    (E : Type u) (F : Type v)
     [NormedAddCommGroup E] [NormedSpace ℝ E] [FiniteDimensional ℝ E]
-    [NormedAddCommGroup F] [NormedSpace ℝ F] [FiniteDimensional ℝ F]
-    (U : Set E),
+    [NormedAddCommGroup F] [NormedSpace ℝ F] [FiniteDimensional ℝ F] : Prop :=
+  ∀ U : Set E,
     IsOpen U →
     U.Nonempty →
     ∀ f : U → F,
@@ -67,7 +69,8 @@ m * (D_v + 1) real state coordinates.
 The only non-project hypothesis is OpenInjectionDimensionObstruction. -/
 theorem continuous_state_dimension_lower_bound_of_open_obstruction
     {m d : ℕ} {ν : Type*} [Fintype ν]
-    (hTop : OpenInjectionDimensionObstruction)
+    (hTop : OpenInjectionDimensionObstruction
+      (SummaryTangent m ν) (Fin d → ℝ))
     (c lambda : Fin m → ℝ)
     (hc : ∀ j, c j ≠ 0)
     (hlambda0 : ∀ j, lambda j ≠ 0)
@@ -89,8 +92,7 @@ theorem continuous_state_dimension_lower_bound_of_open_obstruction
   have hdim :
       Module.finrank ℝ (SummaryTangent m ν) ≤
         Module.finrank ℝ (Fin d → ℝ) :=
-    hTop (E := SummaryTangent m ν) (F := Fin d → ℝ)
-      U hUopen hUne f hfcont hfinj
+    hTop U hUopen hUne f hfcont hfinj
   rw [summaryTangent_finrank, Module.finrank_fin_fun] at hdim
   exact hdim
 
