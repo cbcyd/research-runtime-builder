@@ -298,14 +298,53 @@ jobs:
             df -h /
           } | tee dist/GDN_BUNDLE_MANIFEST.txt
 
-      - name: Upload bundle
+      - name: Upload metadata
         uses: actions/upload-artifact@v4
         with:
-          name: lean-gdn-linux-x86_64-v4.34.0
+          name: lean-gdn-v4.34.0-meta
           path: |
-            lean-offline/dist/lean-chatgpt-bundle-linux-x86_64.tar.xz.part.*
             lean-offline/dist/lean-chatgpt-bundle-linux-x86_64.SHA256SUMS
             lean-offline/dist/GDN_BUNDLE_MANIFEST.txt
             lean-offline/build.log
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload part 000
+        uses: actions/upload-artifact@v4
+        with:
+          name: lean-gdn-v4.34.0-part-000
+          path: lean-offline/dist/lean-chatgpt-bundle-linux-x86_64.tar.xz.part.000
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload part 001
+        uses: actions/upload-artifact@v4
+        with:
+          name: lean-gdn-v4.34.0-part-001
+          path: lean-offline/dist/lean-chatgpt-bundle-linux-x86_64.tar.xz.part.001
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload part 002
+        uses: actions/upload-artifact@v4
+        with:
+          name: lean-gdn-v4.34.0-part-002
+          path: lean-offline/dist/lean-chatgpt-bundle-linux-x86_64.tar.xz.part.002
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload part 003
+        uses: actions/upload-artifact@v4
+        with:
+          name: lean-gdn-v4.34.0-part-003
+          path: lean-offline/dist/lean-chatgpt-bundle-linux-x86_64.tar.xz.part.003
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload part 004
+        uses: actions/upload-artifact@v4
+        with:
+          name: lean-gdn-v4.34.0-part-004
+          path: lean-offline/dist/lean-chatgpt-bundle-linux-x86_64.tar.xz.part.004
           compression-level: 0
           retention-days: 7
