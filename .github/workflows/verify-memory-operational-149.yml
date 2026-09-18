@@ -1,0 +1,120 @@
+name: verify-memory-operational-149
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/verify-memory-operational-149.yml"
+      - "scratch/149/**"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout verifier source
+        uses: actions/checkout@v4
+        with:
+          path: tooling
+
+      - name: Download Lean bundle part 000
+        uses: actions/download-artifact@v4
+        with:
+          name: lean-gdn-v4.34.0-part-000
+          path: parts/000
+          run-id: 35374206922
+          github-token: ${{ github.token }}
+
+      - name: Download Lean bundle part 001
+        uses: actions/download-artifact@v4
+        with:
+          name: lean-gdn-v4.34.0-part-001
+          path: parts/001
+          run-id: 35374206922
+          github-token: ${{ github.token }}
+
+      - name: Download Lean bundle part 002
+        uses: actions/download-artifact@v4
+        with:
+          name: lean-gdn-v4.34.0-part-002
+          path: parts/002
+          run-id: 35374206922
+          github-token: ${{ github.token }}
+
+      - name: Download Lean bundle part 003
+        uses: actions/download-artifact@v4
+        with:
+          name: lean-gdn-v4.34.0-part-003
+          path: parts/003
+          run-id: 35374206922
+          github-token: ${{ github.token }}
+
+      - name: Download Lean bundle part 004
+        uses: actions/download-artifact@v4
+        with:
+          name: lean-gdn-v4.34.0-part-004
+          path: parts/004
+          run-id: 35374206922
+          github-token: ${{ github.token }}
+
+      - name: Assemble pinned offline runtime
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat \
+            parts/000/lean-chatgpt-bundle-linux-x86_64.tar.xz.part.000 \
+            parts/001/lean-chatgpt-bundle-linux-x86_64.tar.xz.part.001 \
+            parts/002/lean-chatgpt-bundle-linux-x86_64.tar.xz.part.002 \
+            parts/003/lean-chatgpt-bundle-linux-x86_64.tar.xz.part.003 \
+            parts/004/lean-chatgpt-bundle-linux-x86_64.tar.xz.part.004 \
+            > lean-bundle.tar.xz
+          echo "3d5ec07e87ca1bfcc4edaea194eb98342ba4ea8f1f44be18b32bcf731b6e9481  lean-bundle.tar.xz" | sha256sum -c -
+          mkdir runtime
+          tar -xJf lean-bundle.tar.xz -C runtime
+          BUNDLE="$(dirname "$(dirname "$(find runtime -type f -path '*/scripts/check_file.sh' -print -quit)")")"
+          test -x "$BUNDLE/scripts/check_file.sh"
+          echo "BUNDLE=$BUNDLE" >> "$GITHUB_ENV"
+          "$BUNDLE/scripts/lean_version.sh"
+
+      - name: Stage #149 modules
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp -a tooling/scratch/149/MemoryOperational "$BUNDLE/"
+          cp tooling/scratch/149/MemoryOperational.lean "$BUNDLE/"
+          grep -R -nE '\b(sorry|admit)\b' "$BUNDLE/MemoryOperational" && exit 1 || true
+
+      - name: Compile complete #149 aggregate
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$BUNDLE"
+          mkdir -p .lake/build/lib/lean/MemoryOperational
+          compile_module() {
+            src="$1"
+            rel="${src%.lean}"
+            out=".lake/build/lib/lean/${rel}.olean"
+            mkdir -p "$(dirname "$out")"
+            ./scripts/check_file.sh -o "$out" "$src"
+          }
+          compile_module MemoryOperational/OperationalQuotient.lean
+          compile_module MemoryOperational/KernelRealization.lean
+          compile_module MemoryOperational/FiniteHorizonLanguage.lean
+          compile_module MemoryOperational/SoftmaxSeparation.lean
+          compile_module MemoryOperational/RestrictedKernelRank.lean
+          compile_module MemoryOperational/RestrictedSoftmaxRank.lean
+          compile_module MemoryOperational/SoftmaxReachableJacobian.lean
+          compile_module MemoryOperational/SoftmaxPredictiveQuotient.lean
+          compile_module MemoryOperational/SoftmaxPhysicalSummary.lean
+          compile_module MemoryOperational/SoftmaxPhysicalBridge.lean
+          compile_module MemoryOperational/SoftmaxLocalInverse.lean
+          compile_module MemoryOperational/SoftmaxGenericLocalOpen.lean
+          compile_module MemoryOperational/SoftmaxAffineMinimality.lean
+          compile_module MemoryOperational.lean
+          ./scripts/check_file.sh MemoryOperational/AxiomCheck.lean
+          ./scripts/check_file.sh MemoryOperational/FullAxiomCheck.lean
+          ./scripts/check_file.sh MemoryOperational/ScratchAxiomCheck.lean
