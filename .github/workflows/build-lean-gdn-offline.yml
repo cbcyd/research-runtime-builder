@@ -19,38 +19,46 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Show runner capacity
+      - name: Show and reclaim runner capacity
         run: |
+          set -euxo pipefail
           nproc
           free -h
           df -h /
-
-      - name: Reclaim unused runner disk
-        run: |
           sudo rm -rf /usr/local/lib/android || true
           sudo rm -rf /usr/share/dotnet || true
           sudo rm -rf /opt/ghc || true
           sudo apt-get clean || true
           df -h /
 
-      - name: Clone offline Lean bundle builder
+      - name: Clone pinned offline-bundle builder
         run: |
-          git clone --depth 1 https://github.com/blake-holman/lean4-offline-linux-x86_64.git lean-offline
+          set -euxo pipefail
+          git clone https://github.com/blake-holman/lean4-offline-linux-x86_64.git lean-offline
+          cd lean-offline
+          git checkout eadd65afb3425082ade639045d305ad091f3ab36
+          git rev-parse HEAD
 
-      - name: Adapt builder for Lean 4.34 and targeted GDN Mathlib closure
+      - name: Adapt pinned builder to Lean 4.34 and GDN imports
         working-directory: lean-offline
         run: |
+          set -euxo pipefail
           python3 - <<'PY'
           from pathlib import Path
 
-          for name in [
+          # Keep every mutation explicit and fail if the pinned upstream layout changes.
+          version_files = [
               "scripts/materialize_linux_bundle.sh",
               "lakefile.lean",
               "lean-toolchain",
               "scripts/rewrite_lake_for_offline.py",
-          ]:
+          ]
+          for name in version_files:
               p = Path(name)
-              p.write_text(p.read_text().replace("4.30.0", "4.34.0"))
+              old = p.read_text()
+              if "4.30.0" not in old:
+                  raise SystemExit(f"expected 4.30.0 pin missing from {name}")
+              p.write_text(old.replace("4.30.0", "4.34.0"))
 
           Path("OfflineBundle/BundleImports.lean").write_text(
               "import Mathlib.LinearAlgebra.Matrix.Rank\n"
@@ -76,54 +84,69 @@ jobs:
               "  norm_num\n"
           )
 
+          # materialize: suppress Mathlib's automatic full-cache post-update hook,
+          # then do one explicit cache fetch; verify our actual Smoke module, not test/.
           p = Path("scripts/materialize_linux_bundle.sh")
           t = p.read_text()
-          targeted = (
-              "lake exe cache get \\\n"
-              "  Mathlib.LinearAlgebra.Matrix.Rank \\\n"
-              "  Mathlib.LinearAlgebra.Matrix.Determinant.Basic \\\n"
-              "  Mathlib.LinearAlgebra.FiniteDimensional.Basic \\\n"
-              "  Mathlib.Analysis.InnerProductSpace.PiL2 \\\n"
-              "  Mathlib.Tactic.Ring \\\n"
-              "  Mathlib.Tactic.NormNum\n"
-          )
-          if "lake exe cache get\n" not in t:
-              raise SystemExit("expected full-cache command not found")
-          t = t.replace("lake exe cache get\n", targeted)
+          if "\nlake update\nlake exe cache get\n" not in t:
+              raise SystemExit("unexpected materialize_linux_bundle.sh update/cache block")
           t = t.replace(
-              "lake build +OfflineBundle.BundleImports:olean +OfflineBundle.Smoke:olean\n",
-              "lake build +OfflineBundle.BundleImports:olean +OfflineBundle.Smoke:olean\n"
+              "\nlake update\nlake exe cache get\n",
+              "\nMATHLIB_NO_CACHE_ON_UPDATE=1 lake update\nlake exe cache get\n",
+          )
+          if "lake env lean test/OfflineSmoke.lean" not in t:
+              raise SystemExit("expected legacy materialize smoke path missing")
+          t = t.replace(
+              "lake env lean test/OfflineSmoke.lean",
+              "lake env lean OfflineBundle/Smoke.lean",
+          )
+          # Compressed .ltar cache is not needed after .olean files are unpacked.
+          t = t.replace(
+              "lake env lean OfflineBundle/Smoke.lean\n",
+              "lake env lean OfflineBundle/Smoke.lean\n"
               "rm -rf \"\${XDG_CACHE_HOME:-\$HOME/.cache}/mathlib\" || true\n"
-              "df -h /\n"
+              "df -h /\n",
           )
           p.write_text(t)
 
+          # Packaging: completely remove the legacy test/ target from Lake queries
+          # and from the staged bundle.
           p = Path("scripts/build_chatgpt_bundle.sh")
+          t = p.read_text()
           lines = [
-              line for line in p.read_text().splitlines()
+              line for line in t.splitlines()
               if "test/OfflineSmoke.lean:" not in line
           ]
-          p.write_text("\n".join(lines) + "\n")
+          t = "\n".join(lines) + "\n"
+          old_copy = 'cp -a OfflineBundle test "$STAGE/"'
+          if old_copy not in t:
+              raise SystemExit("expected OfflineBundle/test copy line missing")
+          t = t.replace(old_copy, 'cp -a OfflineBundle "$STAGE/"')
+          p.write_text(t)
+
+          # Clean offline verification uses the real bundled smoke module only.
+          p = Path("scripts/verify_offline_clean.sh")
+          t = p.read_text()
+          if "test/OfflineSmoke.lean" not in t:
+              raise SystemExit("expected legacy verifier smoke paths missing")
+          p.write_text(t.replace("test/OfflineSmoke.lean", "OfflineBundle/Smoke.lean"))
           PY
 
-          echo "=== validate requested modules exist in pinned mathlib ==="
-          for m in \
-            Mathlib.LinearAlgebra.Matrix.Rank \
-            Mathlib.LinearAlgebra.Matrix.Determinant.Basic \
-            Mathlib.LinearAlgebra.FiniteDimensional.Basic \
-            Mathlib.Analysis.InnerProductSpace.PiL2 \
-            Mathlib.Tactic.Ring \
-            Mathlib.Tactic.NormNum; do \
-            p=".lake/packages/mathlib/${m//./\/}.lean"; \
-            test -f "$p" || { echo "missing module source: $m -> $p"; exit 1; }; \
-          done
+          echo "=== patched materializer ==="
+          cat scripts/materialize_linux_bundle.sh
+          echo "=== query targets ==="
+          sed -n '/query_targets=(/,/)/p' scripts/build_chatgpt_bundle.sh
+          echo "=== staged copy line ==="
+          grep 'cp -a OfflineBundle' scripts/build_chatgpt_bundle.sh
+          echo "=== verifier paths ==="
+          grep -n 'Smoke.lean' scripts/verify_offline_clean.sh
+          echo "=== no legacy test target/path remains in executable scripts ==="
+          if grep -R -n 'test/OfflineSmoke.lean' scripts; then
+            echo "legacy test path still present"
+            exit 1
+          fi
 
-          echo "=== patched cache command ==="
-          grep -A8 -B2 "cache get" scripts/materialize_linux_bundle.sh
-          echo "=== remaining legacy test queries (must be empty) ==="
-          grep "test/OfflineSmoke.lean:" scripts/build_chatgpt_bundle.sh || true
-
-      - name: Build targeted offline bundle
+      - name: Build and package offline bundle
         working-directory: lean-offline
         env:
           PART_SIZE: 200M
@@ -131,20 +154,29 @@ jobs:
           set -o pipefail
           ./scripts/build_chatgpt_bundle.sh 2>&1 | tee build.log
 
-      - name: Record manifest and disk usage
+      - name: Validate output and record manifest
         working-directory: lean-offline
         run: |
+          set -euxo pipefail
+          test -f dist/lean-chatgpt-bundle-linux-x86_64.SHA256SUMS
+          ls dist/lean-chatgpt-bundle-linux-x86_64.tar.xz.part.* >/dev/null
+          sha256sum -c dist/lean-chatgpt-bundle-linux-x86_64.SHA256SUMS
           {
             echo "lean=v4.34.0"
             echo "mathlib=v4.34.0"
-            echo "builder_commit=$(git rev-parse HEAD)"
+            echo "upstream_builder=eadd65afb3425082ade639045d305ad091f3ab36"
+            echo "workflow_commit=${GITHUB_SHA}"
             echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "runner=$(uname -a)"
-            sha256sum OfflineBundle/BundleImports.lean
+            echo "--- sizes ---"
             du -sh dist/lean-chatgpt-bundle-linux-x86_64
             du -sh dist/lean-chatgpt-bundle-linux-x86_64.tar.xz
+            du -ch dist/lean-chatgpt-bundle-linux-x86_64.tar.xz.part.* | tail -n 1
+            echo "--- parts ---"
+            ls -lh dist/lean-chatgpt-bundle-linux-x86_64.tar.xz.part.*
+            echo "--- disk ---"
+            df -h /
           } | tee dist/GDN_BUNDLE_MANIFEST.txt
-          df -h /
 
       - name: Upload bundle
         uses: actions/upload-artifact@v4
