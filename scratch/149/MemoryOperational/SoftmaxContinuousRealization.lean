@@ -152,7 +152,8 @@ open-injection obstruction. -/
 theorem ContinuousExactPhysicalProbeRealization.dimension_lower_bound_of_open_obstruction
     {m d : ℕ} {ν : Type*}
     [Fintype ν] [Nonempty ν] [Nonempty (Fin m)]
-    (hTop : OpenInjectionDimensionObstruction)
+    (hTop : OpenInjectionDimensionObstruction
+      (SummaryTangent m ν) (Fin d → ℝ))
     (c lambda cstar : Fin m → ℝ)
     (hc : ∀ op, 0 < c op)
     (hlambda0 : ∀ op, lambda op ≠ 0)
@@ -179,8 +180,7 @@ theorem ContinuousExactPhysicalProbeRealization.dimension_lower_bound_of_open_ob
   have hdim :
       Module.finrank ℝ (SummaryTangent m ν) ≤
         Module.finrank ℝ (Fin d → ℝ) :=
-    hTop (E := SummaryTangent m ν) (F := Fin d → ℝ)
-      U hUopen hUne f hfcont hfinj
+    hTop U hUopen hUne f hfcont hfinj
   rw [summaryTangent_finrank, Module.finrank_fin_fun] at hdim
   exact hdim
 
