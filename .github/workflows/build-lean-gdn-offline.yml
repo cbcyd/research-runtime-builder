@@ -1,0 +1,164 @@
+name: build-lean-gdn-offline
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/build-lean-gdn-offline.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      XDG_CACHE_HOME: ${{ runner.temp }}/xdg-cache
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show runner capacity
+        run: |
+          nproc
+          free -h
+          df -h /
+
+      - name: Reclaim unused runner disk
+        run: |
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /opt/ghc || true
+          sudo apt-get clean || true
+          df -h /
+
+      - name: Clone offline Lean bundle builder
+        run: |
+          git clone --depth 1 https://github.com/blake-holman/lean4-offline-linux-x86_64.git lean-offline
+
+      - name: Adapt builder for Lean 4.34 and targeted GDN Mathlib closure
+        working-directory: lean-offline
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # Pin the builder to the current Lean/Mathlib release.
+          for name in [
+              "scripts/materialize_linux_bundle.sh",
+              "lakefile.lean",
+              "lean-toolchain",
+              "scripts/rewrite_lake_for_offline.py",
+          ]:
+              p = Path(name)
+              p.write_text(p.read_text().replace("4.30.0", "4.34.0"))
+
+          # Minimal first-pass import surface for the GDN paper.
+          imports = """import Mathlib.LinearAlgebra.Matrix.Rank
+          import Mathlib.LinearAlgebra.Matrix.Determinant.Basic
+          import Mathlib.LinearAlgebra.FiniteDimensional.Basic
+          import Mathlib.Analysis.InnerProductSpace.PiL2
+          import Mathlib.Tactic.Ring
+          import Mathlib.Tactic.NormNum
+          """
+          Path("OfflineBundle/BundleImports.lean").write_text(imports)
+
+          smoke = """import OfflineBundle.BundleImports
+
+          open Matrix
+
+          #check Matrix
+          #check Matrix.rank
+          #check Matrix.det
+          #check Module.finrank
+          #check EuclideanSpace
+
+          example (a b c d : ℝ) :
+              (a + b) * (c + d) = a*c + a*d + b*c + b*d := by
+            ring
+
+          example : (2 : ℝ) + 2 = 4 := by
+            norm_num
+          """
+          Path("OfflineBundle/Smoke.lean").write_text(smoke)
+
+          # The upstream materializer downloads the cache for all of Mathlib.
+          # That exhausted the 14 GB GitHub runner disk.  Mathlib's cache CLI
+          # supports file/module arguments and includes transitive imports, so
+          # request only the six roots used above.
+          p = Path("scripts/materialize_linux_bundle.sh")
+          t = p.read_text()
+          t = t.replace(
+              "lake exe cache get\n",
+              """lake exe cache get \\\n"
+              "  Mathlib/LinearAlgebra/Matrix/Rank.lean \\\n"
+              "  Mathlib/LinearAlgebra/Matrix/Determinant/Basic.lean \\\n"
+              "  Mathlib/LinearAlgebra/FiniteDimensional/Basic.lean \\\n"
+              "  Mathlib/Analysis/InnerProductSpace/PiL2.lean \\\n"
+              "  Mathlib/Tactic/Ring.lean \\\n"
+              "  Mathlib/Tactic/NormNum.lean\n"""
+          )
+          # Compressed cache entries are no longer needed once their .olean files
+          # are unpacked into the package build trees.
+          t = t.replace(
+              "lake build +OfflineBundle.BundleImports:olean +OfflineBundle.Smoke:olean\n",
+              "lake build +OfflineBundle.BundleImports:olean +OfflineBundle.Smoke:olean\n"
+              "rm -rf \"\${XDG_CACHE_HOME:-\$HOME/.cache}/mathlib\" || true\n"
+              "df -h /\n"
+          )
+          p.write_text(t)
+
+          # Lake 4.34 treats the legacy source-file query syntax
+          # test/OfflineSmoke.lean:* as a package target named 'test'.
+          # It is redundant: OfflineBundle.Smoke already gives the complete
+          # dependency closure, while the test file is still retained for the
+          # final offline verification.
+          p = Path("scripts/build_chatgpt_bundle.sh")
+          lines = [
+              line for line in p.read_text().splitlines()
+              if "test/OfflineSmoke.lean:" not in line
+          ]
+          p.write_text("\n".join(lines) + "\n")
+          PY
+
+          echo "=== patched cache command ==="
+          grep -A8 -B2 "cache get" scripts/materialize_linux_bundle.sh
+          echo "=== remaining test queries (must be empty) ==="
+          grep "test/OfflineSmoke.lean:" scripts/build_chatgpt_bundle.sh || true
+
+      - name: Build targeted offline bundle
+        working-directory: lean-offline
+        env:
+          PART_SIZE: 200M
+        run: |
+          set -o pipefail
+          ./scripts/build_chatgpt_bundle.sh 2>&1 | tee build.log
+
+      - name: Record manifest and disk usage
+        if: success()
+        working-directory: lean-offline
+        run: |
+          {
+            echo "lean=v4.34.0"
+            echo "mathlib=v4.34.0"
+            echo "builder_commit=$(git rev-parse HEAD)"
+            echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "runner=$(uname -a)"
+            sha256sum OfflineBundle/BundleImports.lean
+            du -sh dist/lean-chatgpt-bundle-linux-x86_64
+            du -sh dist/lean-chatgpt-bundle-linux-x86_64.tar.xz
+          } | tee dist/GDN_BUNDLE_MANIFEST.txt
+          df -h /
+
+      - name: Upload bundle
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lean-gdn-linux-x86_64-v4.34.0
+          path: |
+            lean-offline/dist/lean-chatgpt-bundle-linux-x86_64.tar.xz.part.*
+            lean-offline/dist/lean-chatgpt-bundle-linux-x86_64.SHA256SUMS
+            lean-offline/dist/GDN_BUNDLE_MANIFEST.txt
+            lean-offline/build.log
+          compression-level: 0
+          retention-days: 7
