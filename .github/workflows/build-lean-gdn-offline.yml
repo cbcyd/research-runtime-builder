@@ -69,6 +69,7 @@ jobs:
           Path("OfflineBundle/BundleImports.lean").write_text(
               "import Mathlib.LinearAlgebra.Matrix.Rank\n"
               "import Mathlib.LinearAlgebra.Matrix.Determinant.Basic\n"
+              "import Mathlib.LinearAlgebra.Matrix.SchurComplement\n"
               "import Mathlib.LinearAlgebra.FiniteDimensional.Basic\n"
               "import Mathlib.Analysis.InnerProductSpace.PiL2\n"
               "import Mathlib.Tactic.Ring\n"
@@ -102,6 +103,7 @@ jobs:
               "for f in \\\n"
               "  Mathlib/LinearAlgebra/Matrix/Rank.lean \\\n"
               "  Mathlib/LinearAlgebra/Matrix/Determinant/Basic.lean \\\n"
+              "  Mathlib/LinearAlgebra/Matrix/SchurComplement.lean \\\n"
               "  Mathlib/LinearAlgebra/FiniteDimensional/Basic.lean \\\n"
               "  Mathlib/Analysis/InnerProductSpace/PiL2.lean \\\n"
               "  Mathlib/Tactic/Ring.lean \\\n"
