@@ -197,42 +197,36 @@ jobs:
           # including build-time packages that are intentionally outside the
           # minimal proof-checking closure.
           p = Path("scripts/verify_offline_clean.sh")
-          p.write_text("""#!/usr/bin/env bash
-set -euo pipefail
+          p.write_text(
+              "#!/usr/bin/env bash\n"
+              "set -euo pipefail\n"
+              "\n"
+              "SCRIPT_ROOT=\"$(cd \"$(dirname \"\\${BASH_SOURCE[0]}\")/..\" && pwd)\"\n"
+              "ROOT=\"$(cd \"\\${1:-$SCRIPT_ROOT}\" && pwd)\"\n"
+              "TMP=\"$(mktemp -d)\"\n"
+              "trap 'rm -rf \"$TMP\"' EXIT\n"
+              "\n"
+              "COPY=\"$TMP/$(basename \"$ROOT\")\"\n"
+              "EMPTY_HOME=\"$TMP/empty-home\"\n"
+              "mkdir -p \"$COPY\" \"$EMPTY_HOME\"\n"
+              "\n"
+              "tar --exclude='./.git' --exclude='dist' --exclude='tmp' "
+              "-C \"$ROOT\" -cf - . | tar -C \"$COPY\" -xf -\n"
+              "\n"
+              "echo \"== clean environment versions ==\"\n"
+              "env -i HOME=\"$EMPTY_HOME\" PATH=\"/usr/bin:/bin\" bash -lc "
+              "'set -euo pipefail; cd \"$1\"; ./scripts/lean_version.sh' bash \"$COPY\"\n"
+              "\n"
+              "echo\n"
+              "echo \"== supported offline checker ==\"\n"
+              "env -i HOME=\"$EMPTY_HOME\" PATH=\"/usr/bin:/bin\" bash -lc "
+              "'set -euo pipefail; cd \"$1\"; ./scripts/check_file.sh OfflineBundle/Smoke.lean' "
+              "bash \"$COPY\"\n"
+              "\n"
+              "echo\n"
+              "echo \"offline clean verification succeeded\"\n"
+          )
 
-SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ROOT="$(cd "${1:-$SCRIPT_ROOT}" && pwd)"
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
-
-COPY="$TMP/$(basename "$ROOT")"
-EMPTY_HOME="$TMP/empty-home"
-mkdir -p "$COPY" "$EMPTY_HOME"
-
-tar \
-  --exclude='./.git' \
-  --exclude='dist' \
-  --exclude='tmp' \
-  -C "$ROOT" -cf - . | tar -C "$COPY" -xf -
-
-echo "== clean environment versions =="
-env -i HOME="$EMPTY_HOME" PATH="/usr/bin:/bin" bash -lc '
-  set -euo pipefail
-  cd "$1"
-  ./scripts/lean_version.sh
-' bash "$COPY"
-
-echo
-echo "== supported offline checker =="
-env -i HOME="$EMPTY_HOME" PATH="/usr/bin:/bin" bash -lc '
-  set -euo pipefail
-  cd "$1"
-  ./scripts/check_file.sh OfflineBundle/Smoke.lean
-' bash "$COPY"
-
-echo
-echo "offline clean verification succeeded"
-""")
           PY
 
           echo "=== static syntax checks ==="
