@@ -129,21 +129,23 @@ jobs:
           # The upstream copier predates that split and only copies .olean itself.
           p = Path("scripts/copy_lean_closure.py")
           t = p.read_text()
-          old = """for olean in sorted(olean_paths):
-    copy_path(olean)
-
-    if os.environ.get("INCLUDE_ILEAN") == "1":
-        copy_path(olean.with_suffix(".ilean"))
-"""
-          new = """for olean in sorted(olean_paths):
-    copy_path(olean)
-
-    # Lean 4.34 split module data into import-level sidecars.
-    # Copy every part that exists next to the main .olean.
-    copy_path(Path(str(olean) + ".server"))
-    copy_path(Path(str(olean) + ".private"))
-    copy_path(olean.with_suffix(".ilean"))
-"""
+          old = (
+              "for olean in sorted(olean_paths):\n"
+              "    copy_path(olean)\n"
+              "\n"
+              "    if os.environ.get(\"INCLUDE_ILEAN\") == \"1\":\n"
+              "        copy_path(olean.with_suffix(\".ilean\"))\n"
+          )
+          new = (
+              "for olean in sorted(olean_paths):\n"
+              "    copy_path(olean)\n"
+              "\n"
+              "    # Lean 4.34 split module data into import-level sidecars.\n"
+              "    # Copy every part that exists next to the main .olean.\n"
+              "    copy_path(Path(str(olean) + \".server\"))\n"
+              "    copy_path(Path(str(olean) + \".private\"))\n"
+              "    copy_path(olean.with_suffix(\".ilean\"))\n"
+          )
           if old not in t:
               raise SystemExit("unexpected copy_lean_closure.py olean block")
           p.write_text(t.replace(old, new))
