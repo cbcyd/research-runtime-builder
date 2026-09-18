@@ -1,0 +1,46 @@
+name: snapshot-149-local
+
+on:
+  push:
+    branches:
+      - verify-149-continuous-v0
+    paths:
+      - ".github/workflows/snapshot-149-local.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout #149
+        uses: actions/checkout@v4
+        with:
+          repository: cbcyd/latent-system-runtime
+          ref: research/149-memory-operational-quotient-v0
+          path: source
+          fetch-depth: 1
+
+      - name: Package #149 source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd source
+          git rev-parse HEAD | tee ../SOURCE_SHA.txt
+          tar -czf ../memory-operational-149-source.tar.gz \
+            docs/experiments/memory-operational-quotient-v0 \
+            docs/theory/MEMORY_OPERATIONAL_REALIZATION_V0.md
+          cd ..
+          sha256sum memory-operational-149-source.tar.gz | tee SOURCE_SHA256.txt
+
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-operational-149-source
+          path: |
+            memory-operational-149-source.tar.gz
+            SOURCE_SHA.txt
+            SOURCE_SHA256.txt
+          compression-level: 0
+          retention-days: 3
