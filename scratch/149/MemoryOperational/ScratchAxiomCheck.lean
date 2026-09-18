@@ -1,5 +1,6 @@
 import MemoryOperational.SoftmaxPositiveMass
 import MemoryOperational.SoftmaxContinuousSoftmax
+import MemoryOperational.SoftmaxContinuousRecurrent
 import MemoryOperational.SoftmaxGenericLocalOpen
 import MemoryOperational.SoftmaxAffineMinimality
 
@@ -29,3 +30,5 @@ import MemoryOperational.SoftmaxAffineMinimality
 #print axioms KernelOperational.SoftmaxPositiveMass.querySummary_fst_eq_denom
 #print axioms KernelOperational.SoftmaxPositiveMass.querySummary_compile_mass_pos_of_nonempty
 #print axioms KernelOperational.SoftmaxPositiveMass.compile_eq_iff_all_append_futures_equivalent_nonempty
+#print axioms KernelOperational.SoftmaxReachable.richSummaryMap_continuous
+#print axioms KernelOperational.SoftmaxReachable.continuous_compiled_softmax_dimension_lower_bound_of_open_obstruction
