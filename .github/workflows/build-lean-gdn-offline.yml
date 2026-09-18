@@ -125,10 +125,36 @@ jobs:
           )
           p.write_text(t)
 
-          # Lean 4.34 uses split OLean parts (.olean.server/.olean.private).
-          # The upstream copier predates that split and only copies .olean itself.
+          # Lean 4.34 module imports can require .olean.server/.olean.private
+          # and IR artifacts for meta execution.  Preserve every query-referenced
+          # existing file, then additionally infer source/olean sidecars below.
           p = Path("scripts/copy_lean_closure.py")
           t = p.read_text()
+          old_scan = (
+              "for raw in walk_strings(data):\n"
+              "    if raw.endswith((\".olean\", \".so\")) or \".so.\" in raw:\n"
+              "        path = Path(raw)\n"
+              "        if not path.is_absolute():\n"
+              "            path = root / path\n"
+              "        if raw.endswith(\".olean\"):\n"
+              "            olean_paths.add(path.resolve())\n"
+              "        else:\n"
+              "            extra_paths.add(path.resolve())\n"
+          )
+          new_scan = (
+              "for raw in walk_strings(data):\n"
+              "    path = Path(raw)\n"
+              "    if not path.is_absolute():\n"
+              "        path = root / path\n"
+              "    if path.is_file():\n"
+              "        resolved = path.resolve()\n"
+              "        extra_paths.add(resolved)\n"
+              "        if raw.endswith(\".olean\"):\n"
+              "            olean_paths.add(resolved)\n"
+          )
+          if old_scan not in t:
+              raise SystemExit("unexpected copy_lean_closure.py query scan block")
+          t = t.replace(old_scan, new_scan)
           old = (
               "for olean in sorted(olean_paths):\n"
               "    copy_path(olean)\n"
@@ -179,6 +205,7 @@ jobs:
           bash -n scripts/verify_offline_clean.sh
           bash -n scripts/check_file.sh
           python3 -m py_compile scripts/copy_lean_closure.py scripts/rewrite_lake_for_offline.py
+          grep -F 'if path.is_file():' scripts/copy_lean_closure.py
           grep -F 'Path(str(olean) + ".server")' scripts/copy_lean_closure.py
           grep -F 'Path(str(olean) + ".private")' scripts/copy_lean_closure.py
           if grep -F -n '4.30.0' scripts/materialize_linux_bundle.sh lakefile.lean lean-toolchain scripts/rewrite_lake_for_offline.py; then
