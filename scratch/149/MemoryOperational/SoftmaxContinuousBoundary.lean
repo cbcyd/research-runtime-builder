@@ -6,14 +6,14 @@ open Filter Topology Set
 namespace KernelOperational
 namespace SoftmaxReachable
 
+universe u v
+
 /-- The only external topology principle still missing from the pinned Mathlib:
 a continuous injection from a nonempty open subset of one finite-dimensional
 real normed space into another cannot lower dimension.
 
 This is a proposition, not an axiom. The final softmax theorem below takes it
 as an explicit hypothesis, isolating the exact standard-topology dependency. -/
-universe u v
-
 def OpenInjectionDimensionObstruction
     (E : Type u) (F : Type v)
     [NormedAddCommGroup E] [NormedSpace ℝ E] [FiniteDimensional ℝ E]
