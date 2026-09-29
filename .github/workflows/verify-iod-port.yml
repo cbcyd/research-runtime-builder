@@ -1,0 +1,139 @@
+name: verify-iod-port
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "research/29-iod-compat-build-v0"
+    paths:
+      - ".github/workflows/verify-iod-port.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reclaim runner space
+        run: |
+          set -euxo pipefail
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc || true
+          sudo apt-get clean || true
+          df -h /
+
+      - name: Install elan
+        run: |
+          set -euxo pipefail
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Clone exact Mathlib 4.34.0
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 --branch v4.34.0 https://github.com/leanprover-community/mathlib4.git mathlib4
+          git -C mathlib4 rev-parse HEAD
+          cat mathlib4/lean-toolchain
+
+      - name: Fetch Mathlib cache
+        working-directory: mathlib4
+        run: |
+          set -euxo pipefail
+          lake exe cache get
+
+      - name: Materialize exact external proofs
+        run: |
+          set -euxo pipefail
+          mkdir -p iod-port/FixedPointTheorems iod-port/ExternalIOD
+          cp mathlib4/lean-toolchain iod-port/lean-toolchain
+
+          cat > iod-port/lakefile.toml <<'EOF'
+          name = "iod-port"
+          version = "0.1.0"
+          packagesDir = ".lake/packages"
+
+          [[require]]
+          name = "mathlib"
+          path = "../mathlib4"
+
+          [[lean_lib]]
+          name = "FixedPointTheorems"
+
+          [[lean_lib]]
+          name = "ExternalIOD"
+          EOF
+
+          curl -fsSL https://raw.githubusercontent.com/harfe/fixed-point-theorems-lean4/770940ddf9878cf61952ed53d910b92bca841838/FixedPointTheorems/cubical_sperner_prep.lean             -o iod-port/FixedPointTheorems/cubical_sperner_prep.lean
+          curl -fsSL https://raw.githubusercontent.com/harfe/fixed-point-theorems-lean4/770940ddf9878cf61952ed53d910b92bca841838/FixedPointTheorems/cubical_sperner.lean             -o iod-port/FixedPointTheorems/cubical_sperner.lean
+          curl -fsSL https://raw.githubusercontent.com/harfe/fixed-point-theorems-lean4/770940ddf9878cf61952ed53d910b92bca841838/FixedPointTheorems/apply_cubical_sperner.lean             -o iod-port/FixedPointTheorems/apply_cubical_sperner.lean
+          curl -fsSL https://raw.githubusercontent.com/harfe/fixed-point-theorems-lean4/770940ddf9878cf61952ed53d910b92bca841838/FixedPointTheorems/convex_homeos.lean             -o iod-port/FixedPointTheorems/convex_homeos.lean
+          curl -fsSL https://raw.githubusercontent.com/harfe/fixed-point-theorems-lean4/770940ddf9878cf61952ed53d910b92bca841838/FixedPointTheorems/brouwer.lean             -o iod-port/FixedPointTheorems/brouwer.lean
+          curl -fsSL https://raw.githubusercontent.com/mccorvie/classification-of-surfaces/e3c7230fe78d7b056a415d9ecae6f77887046b32/ClassificationOfSurfaces/Topology/InvarianceOfDomain.lean             -o iod-port/ExternalIOD/InvarianceOfDomain.lean
+
+          cd iod-port
+          test "$(git hash-object FixedPointTheorems/cubical_sperner_prep.lean)" = "243b3dbbeb52b883bfbc85e4ae9adfd44558feb5"
+          test "$(git hash-object FixedPointTheorems/cubical_sperner.lean)" = "0380c46b9fa683ed06ae091692ee7f4caa6ce167"
+          test "$(git hash-object FixedPointTheorems/apply_cubical_sperner.lean)" = "ffbbbcd1c1c66c6ae8956ac7d8de1e3c311b38fc"
+          test "$(git hash-object FixedPointTheorems/convex_homeos.lean)" = "944544a81b1282f3de164cdb7332d8727d8cc6f2"
+          test "$(git hash-object FixedPointTheorems/brouwer.lean)" = "7384d5b7fcbe476d461e02544a964d249a477eb9"
+          test "$(git hash-object ExternalIOD/InvarianceOfDomain.lean)" = "d34ae897b02db25a11a775d017b843191dc1ab77"
+
+      - name: Add Brouwer-to-IOD bridge
+        run: |
+          cat > iod-port/ExternalIOD/Bridge.lean <<'EOF'
+          import FixedPointTheorems.brouwer
+          import ExternalIOD.InvarianceOfDomain
+
+          open Metric Set
+          open LeanEval.Topology.ClassificationOfSurfaces.InvarianceOfDomain
+
+          noncomputable instance harfeBrouwerFixedPoint
+              (E : Type*) [NormedAddCommGroup E] [InnerProductSpace ℝ E]
+              [FiniteDimensional ℝ E] : BrouwerFixedPoint E where
+            brouwer_fixed_point f hf := by
+              let F : C(closedBall (0 : E) 1, closedBall 0 1) := ⟨f, hf⟩
+              exact _root_.brouwer_fixed_point
+                (closedBall (0 : E) 1)
+                (convex_closedBall (0 : E) 1)
+                (isCompact_closedBall (0 : E) 1)
+                ⟨0, by simp⟩
+                F
+
+          theorem invariance_of_domain_open_map_unconditional
+              {E : Type*} [NormedAddCommGroup E] [InnerProductSpace ℝ E]
+              [FiniteDimensional ℝ E]
+              (f : E → E) (U : Set E) (hU : IsOpen U)
+              (hf_cont : ContinuousOn f U) (hf_inj : Set.InjOn f U) :
+              IsOpen (f '' U) := by
+            letI : BrouwerFixedPoint E := harfeBrouwerFixedPoint E
+            exact invariance_of_domain_open_map f U hU hf_cont hf_inj
+
+          #check brouwer_fixed_point
+          #check invariance_of_domain_open_map
+          #check invariance_of_domain_open_map_unconditional
+          #print axioms brouwer_fixed_point
+          #print axioms invariance_of_domain_open_map
+          #print axioms invariance_of_domain_open_map_unconditional
+          EOF
+
+      - name: Compile exact Harfe Brouwer sources
+        working-directory: iod-port
+        run: |
+          set -euxo pipefail
+          lake update
+          lake build FixedPointTheorems.brouwer
+
+      - name: Compile exact invariance-of-domain source
+        working-directory: iod-port
+        run: |
+          set -euxo pipefail
+          lake build ExternalIOD.InvarianceOfDomain
+
+      - name: Compile bridge and audit axioms
+        working-directory: iod-port
+        run: |
+          set -euxo pipefail
+          lake build ExternalIOD.Bridge
