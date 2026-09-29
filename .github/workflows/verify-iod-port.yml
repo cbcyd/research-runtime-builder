@@ -18,13 +18,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Reclaim runner space
-        run: |
-          set -euxo pipefail
-          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc || true
-          sudo apt-get clean || true
-          df -h /
-
       - name: Install elan
         run: |
           set -euxo pipefail
